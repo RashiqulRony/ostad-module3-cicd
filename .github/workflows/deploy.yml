@@ -1,4 +1,4 @@
-name: EC2 Node.js Deploy (PM2 Only)
+name: EC2 Node.js Auto Deploy (Fixed PM2)
 
 on:
   push:
@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       # ================= SSH SETUP =================
       - name: Setup SSH Key
         run: |
@@ -22,9 +23,9 @@ jobs:
       # ================= TEST CONNECTION =================
       - name: Test EC2 Connection
         run: |
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'EC2 Connected Successfully'"
+          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'EC2 Connected'"
 
-      # ================= DEPLOY APP =================
+      # ================= DEPLOY =================
       - name: Deploy Application
         run: |
           ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
@@ -33,21 +34,21 @@ jobs:
 
           APP_DIR="/var/www/ostad-app"
 
-          echo "===== System Update ====="
+          echo "===== SYSTEM UPDATE ====="
           sudo apt update -y
 
-          echo "===== Install Node.js ====="
+          echo "===== NODE INSTALL CHECK ====="
           if ! command -v node >/dev/null 2>&1; then
             curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
             sudo apt install -y nodejs
           fi
 
-          echo "===== Install PM2 ====="
+          echo "===== PM2 INSTALL CHECK ====="
           if ! command -v pm2 >/dev/null 2>&1; then
             sudo npm install -g pm2
           fi
 
-          echo "===== Clone / Pull Project ====="
+          echo "===== CLONE / UPDATE PROJECT ====="
           if [ ! -d "$APP_DIR" ]; then
             git clone https://github.com/RashiqulRony/ostad-module3-cicd.git $APP_DIR
           else
@@ -57,21 +58,31 @@ jobs:
 
           cd $APP_DIR
 
-          echo "===== Install Dependencies ====="
+          echo "===== INSTALL DEPENDENCIES ====="
           npm install
 
-          echo "===== Start App on Port 5000 ====="
+          echo "===== START APP ON PORT 5000 ====="
           export PORT=5000
+
+          # Auto detect entry file
+          APP_FILE=$(ls | grep -E "app.js|server.js|index.js" | head -n 1)
+
+          if [ -z "$APP_FILE" ]; then
+            echo "❌ ERROR: No entry file found (app.js/server.js/index.js missing)"
+            exit 1
+          fi
+
+          echo "🚀 Starting: $APP_FILE"
 
           if pm2 describe ostad-app >/dev/null 2>&1; then
             pm2 restart ostad-app
           else
-            pm2 start app.js --name ostad-app
+            pm2 start $APP_FILE --name ostad-app
           fi
 
           pm2 save
 
-          echo "===== DEPLOYMENT DONE ====="
+          echo "===== DEPLOY SUCCESS ====="
 
           EOF
 
