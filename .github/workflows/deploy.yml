@@ -1,4 +1,4 @@
-name: EC2 Node.js Auto Deploy (Fixed PM2)
+name: Build & Deploy Frontend to EC2
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
           ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'EC2 Connected'"
 
       # ================= DEPLOY =================
-      - name: Deploy Application
+      - name: Build and Deploy
         run: |
           ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
 
@@ -34,55 +34,69 @@ jobs:
 
           APP_DIR="/var/www/ostad-app"
 
-          echo "===== SYSTEM UPDATE ====="
+          echo "=============================="
+          echo "Update system"
+          echo "=============================="
           sudo apt update -y
 
-          echo "===== NODE INSTALL CHECK ====="
+          echo "=============================="
+          echo "Install Node.js if missing"
+          echo "=============================="
           if ! command -v node >/dev/null 2>&1; then
             curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
             sudo apt install -y nodejs
           fi
 
-          echo "===== PM2 INSTALL CHECK ====="
-          if ! command -v pm2 >/dev/null 2>&1; then
-            sudo npm install -g pm2
-          fi
+          echo "=============================="
+          echo "Create web directory"
+          echo "=============================="
+          sudo mkdir -p $APP_DIR
+          sudo chown -R $USER:$USER $APP_DIR
 
-          echo "===== CLONE / UPDATE PROJECT ====="
-          if [ ! -d "$APP_DIR" ]; then
-            git clone https://github.com/RashiqulRony/ostad-module3-cicd.git $APP_DIR
+          echo "=============================="
+          echo "Clone / Pull Project"
+          echo "=============================="
+
+          if [ ! -d "project" ]; then
+            git clone https://github.com/RashiqulRony/ostad-module3-cicd.git project
           else
-            cd $APP_DIR
+            cd project
             git pull origin main
           fi
 
-          cd $APP_DIR
+          cd project
 
-          echo "===== INSTALL DEPENDENCIES ====="
+          echo "=============================="
+          echo "Install dependencies"
+          echo "=============================="
           npm install
 
-          echo "===== START APP ON PORT 5000 ====="
-          export PORT=5000
+          echo "=============================="
+          echo "Build project"
+          echo "=============================="
+          npm run build
 
-          # Auto detect entry file
-          APP_FILE=$(ls | grep -E "app.js|server.js|index.js" | head -n 1)
+          echo "=============================="
+          echo "Deploy dist to /var/www"
+          echo "=============================="
 
-          if [ -z "$APP_FILE" ]; then
-            echo "❌ ERROR: No entry file found (app.js/server.js/index.js missing)"
+          rm -rf $APP_DIR/*
+          cp -r dist/* $APP_DIR/
+
+          echo "=============================="
+          echo "Replace index.html if needed"
+          echo "=============================="
+
+          if [ -f "$APP_DIR/index.html" ]; then
+            echo "index.html deployed successfully"
+          else
+            echo "ERROR: index.html not found in dist"
             exit 1
           fi
 
-          echo "🚀 Starting: $APP_FILE"
-
-          if pm2 describe ostad-app >/dev/null 2>&1; then
-            pm2 restart ostad-app
-          else
-            pm2 start $APP_FILE --name ostad-app
-          fi
-
-          pm2 save
-
-          echo "===== DEPLOY SUCCESS ====="
+          echo "=============================="
+          echo "DEPLOY DONE"
+          echo "=============================="
 
           EOF
 
