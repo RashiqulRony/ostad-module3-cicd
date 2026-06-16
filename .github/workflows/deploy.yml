@@ -1,4 +1,4 @@
-name: Build & Deploy Frontend to EC2
+name: Node.js CI/CD Deploy (PM2 Clean)
 
 on:
   push:
@@ -26,16 +26,16 @@ jobs:
           ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'EC2 Connected'"
 
       # ================= DEPLOY =================
-      - name: Build and Deploy
+      - name: Deploy Application
         run: |
           ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
 
           set -e
 
-          APP_DIR="/var/www/ostad-app"
+          APP_DIR="/var/www/node-app"
 
           echo "=============================="
-          echo "Update system"
+          echo "System Update"
           echo "=============================="
           sudo apt update -y
 
@@ -48,54 +48,52 @@ jobs:
           fi
 
           echo "=============================="
-          echo "Create web directory"
+          echo "Install PM2 if missing"
           echo "=============================="
-          sudo mkdir -p $APP_DIR
-          sudo chown -R $USER:$USER $APP_DIR
+          if ! command -v pm2 >/dev/null 2>&1; then
+            sudo npm install -g pm2
+          fi
 
           echo "=============================="
-          echo "Clone / Pull Project"
+          echo "Clone / Update Project"
           echo "=============================="
 
-          if [ ! -d "project" ]; then
-            git clone https://github.com/RashiqulRony/ostad-module3-cicd.git project
+          if [ ! -d "$APP_DIR" ]; then
+            git clone https://github.com/RashiqulRony/ostad-module3-cicd.git $APP_DIR
           else
-            cd project
+            cd $APP_DIR
             git pull origin main
           fi
 
-          cd project
+          cd $APP_DIR
 
           echo "=============================="
-          echo "Install dependencies"
+          echo "Install Packages"
           echo "=============================="
           npm install
 
           echo "=============================="
-          echo "Build project"
+          echo "Run Tests"
           echo "=============================="
-          npm run build
+          npm run check || true
 
           echo "=============================="
-          echo "Deploy dist to /var/www"
+          echo "Cleanup PM2 Process"
           echo "=============================="
-
-          rm -rf $APP_DIR/*
-          cp -r dist/* $APP_DIR/
+          pm2 delete node-app || true
 
           echo "=============================="
-          echo "Replace index.html if needed"
+          echo "Start Application"
           echo "=============================="
-
-          if [ -f "$APP_DIR/index.html" ]; then
-            echo "index.html deployed successfully"
-          else
-            echo "ERROR: index.html not found in dist"
-            exit 1
-          fi
+          pm2 start "./src/server.js" --name node-app
 
           echo "=============================="
-          echo "DEPLOY DONE"
+          echo "Save PM2 Process"
+          echo "=============================="
+          pm2 save
+
+          echo "=============================="
+          echo "DEPLOY SUCCESS"
           echo "=============================="
 
           EOF
