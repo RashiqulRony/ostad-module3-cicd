@@ -1,4 +1,4 @@
-name: Node.js 22 CI/CD Deploy (PM2)
+name: EC2 Node.js CI/CD Deploy (Full Working)
 
 on:
   push:
@@ -16,16 +16,22 @@ jobs:
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+
+          echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/ec2_key
+
           chmod 600 ~/.ssh/ec2_key
+
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
       # ================= TEST CONNECTION =================
       - name: Test EC2 Connection
         run: |
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'EC2 Connected'"
+          ssh -i ~/.ssh/ec2_key \
+          -o StrictHostKeyChecking=no \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+          "echo 'EC2 CONNECTION SUCCESS'"
 
-      # ================= DEPLOY =================
+      # ================= DEPLOY APP =================
       - name: Deploy Application
         run: |
           ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
@@ -40,7 +46,7 @@ jobs:
           sudo apt update -y
 
           echo "=============================="
-          echo "INSTALL NODE JS 22"
+          echo "INSTALL NODE 22 (if missing)"
           echo "=============================="
           if ! command -v node >/dev/null 2>&1; then
             curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -58,7 +64,7 @@ jobs:
           fi
 
           echo "=============================="
-          echo "CLONE OR UPDATE PROJECT"
+          echo "CLONE / UPDATE REPO"
           echo "=============================="
 
           if [ ! -d "$APP_DIR" ]; then
@@ -81,9 +87,8 @@ jobs:
           npm run check || true
 
           echo "=============================="
-          echo "RUN APPLICATION START COMMAND"
+          echo "NPM START (OPTIONAL CHECK)"
           echo "=============================="
-
           npm start || true
 
           echo "=============================="
@@ -92,7 +97,7 @@ jobs:
           pm2 delete node-app || true
 
           echo "=============================="
-          echo "START WITH PM2 (ABSOLUTE PATH)"
+          echo "START APP WITH PM2"
           echo "=============================="
           pm2 start "./src/server.js" --name node-app
 
