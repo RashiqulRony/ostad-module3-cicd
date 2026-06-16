@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node Version 22
+- Node Version 22 Eidt
 
 
 ### 1. For Run This Applications
