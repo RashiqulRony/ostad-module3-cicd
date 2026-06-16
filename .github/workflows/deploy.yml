@@ -1,4 +1,4 @@
-name: EC2 CI/CD Deploy
+name: EC2 Deploy Node App
 
 on:
   push:
@@ -18,11 +18,11 @@ jobs:
           chmod 600 ~/.ssh/ec2_key
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Test EC2 Connection
+      - name: Test Connection
         run: |
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo EC2 Connected"
+          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo OK"
 
-      - name: Deploy Application
+      - name: Deploy App
         run: |
           ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
 
@@ -30,39 +30,35 @@ jobs:
 
           APP_DIR="/var/www/ostad-app"
 
-          echo "Updating system..."
           sudo apt update -y
 
-          echo "Installing Node.js if missing..."
-          if ! command -v node >/dev/null 2>&1; then
+          # Node install
+          if ! command -v node >/dev/null; then
             curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
             sudo apt install -y nodejs
           fi
 
-          echo "Installing PM2..."
-          if ! command -v pm2 >/dev/null 2>&1; then
+          # PM2 install
+          if ! command -v pm2 >/dev/null; then
             sudo npm install -g pm2
           fi
 
-          echo "Installing Nginx..."
-          if ! command -v nginx >/dev/null 2>&1; then
-            sudo apt install nginx -y
+          # Nginx install
+          if ! command -v nginx >/dev/null; then
+            sudo apt install -y nginx
           fi
 
-          echo "Cloning or pulling project..."
+          # Clone or update repo
           if [ ! -d "$APP_DIR" ]; then
             git clone https://github.com/RashiqulRony/ostad-module3-cicd.git $APP_DIR
           else
-            cd $APP_DIR
-            git pull origin main
+            cd $APP_DIR && git pull origin main
           fi
 
           cd $APP_DIR
-
-          echo "Installing dependencies..."
           npm install
 
-          echo "Starting app with PM2..."
+          # Start app
           export PORT=5000
 
           if pm2 describe ostad-app >/dev/null 2>&1; then
@@ -73,8 +69,8 @@ jobs:
 
           pm2 save
 
-          echo "Configuring Nginx..."
-          sudo bash -c 'cat > /etc/nginx/sites-available/ostad <<EOF2
+          # Nginx config (IMPORTANT FIXED BLOCK)
+          sudo bash -c 'cat > /etc/nginx/sites-available/ostad <<NGINX
 server {
     listen 80;
     server_name _;
@@ -91,7 +87,7 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 }
-EOF2'
+NGINX'
 
           sudo ln -sf /etc/nginx/sites-available/ostad /etc/nginx/sites-enabled/ostad
           sudo rm -f /etc/nginx/sites-enabled/default || true
@@ -99,10 +95,10 @@ EOF2'
           sudo nginx -t
           sudo systemctl restart nginx
 
-          echo "Deployment Completed!"
+          echo "DEPLOY DONE"
 
           EOF
 
-      - name: Cleanup SSH
+      - name: Cleanup
         if: always()
         run: rm -f ~/.ssh/ec2_key
