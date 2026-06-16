@@ -1,4 +1,4 @@
-name: Node.js CI/CD Deploy (PM2 Clean)
+name: Node.js 22 CI/CD Deploy (PM2)
 
 on:
   push:
@@ -35,27 +35,30 @@ jobs:
           APP_DIR="/var/www/node-app"
 
           echo "=============================="
-          echo "System Update"
+          echo "SYSTEM UPDATE"
           echo "=============================="
           sudo apt update -y
 
           echo "=============================="
-          echo "Install Node.js if missing"
+          echo "INSTALL NODE JS 22"
           echo "=============================="
           if ! command -v node >/dev/null 2>&1; then
-            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
             sudo apt install -y nodejs
           fi
 
+          echo "Node Version:"
+          node -v
+
           echo "=============================="
-          echo "Install PM2 if missing"
+          echo "INSTALL PM2"
           echo "=============================="
           if ! command -v pm2 >/dev/null 2>&1; then
             sudo npm install -g pm2
           fi
 
           echo "=============================="
-          echo "Clone / Update Project"
+          echo "CLONE OR UPDATE PROJECT"
           echo "=============================="
 
           if [ ! -d "$APP_DIR" ]; then
@@ -68,27 +71,33 @@ jobs:
           cd $APP_DIR
 
           echo "=============================="
-          echo "Install Packages"
+          echo "INSTALL DEPENDENCIES"
           echo "=============================="
           npm install
 
           echo "=============================="
-          echo "Run Tests"
+          echo "RUN TESTS"
           echo "=============================="
           npm run check || true
 
           echo "=============================="
-          echo "Cleanup PM2 Process"
+          echo "RUN APPLICATION START COMMAND"
+          echo "=============================="
+
+          npm start || true
+
+          echo "=============================="
+          echo "PM2 CLEANUP"
           echo "=============================="
           pm2 delete node-app || true
 
           echo "=============================="
-          echo "Start Application"
+          echo "START WITH PM2 (ABSOLUTE PATH)"
           echo "=============================="
           pm2 start "./src/server.js" --name node-app
 
           echo "=============================="
-          echo "Save PM2 Process"
+          echo "SAVE PM2 PROCESS"
           echo "=============================="
           pm2 save
 
