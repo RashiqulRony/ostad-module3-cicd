@@ -1,4 +1,4 @@
-name: EC2 Node.js CI/CD Deploy (Full Working)
+name: EC2 Node.js CI/CD Deploy
 
 on:
   push:
@@ -11,108 +11,121 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      # ================= SSH SETUP =================
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
-
           echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/ec2_key
-
           chmod 600 ~/.ssh/ec2_key
-
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      # ================= TEST CONNECTION =================
       - name: Test EC2 Connection
         run: |
           ssh -i ~/.ssh/ec2_key \
-          -o StrictHostKeyChecking=no \
-          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-          "echo 'EC2 CONNECTION SUCCESS'"
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "echo 'EC2 CONNECTION SUCCESS'"
 
-      # ================= DEPLOY APP =================
       - name: Deploy Application
         run: |
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -i ~/.ssh/ec2_key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
 
           set -e
 
           APP_DIR="/var/www/node-app"
+          REPO_URL="https://github.com/RashiqulRony/ostad-module3-cicd.git"
 
-          echo "=============================="
+          echo "================================="
           echo "SYSTEM UPDATE"
-          echo "=============================="
+          echo "================================="
           sudo apt update -y
 
-          echo "=============================="
-          echo "INSTALL NODE 22 (if missing)"
-          echo "=============================="
+          echo "================================="
+          echo "INSTALL GIT"
+          echo "================================="
+          sudo apt install -y git
+
+          echo "================================="
+          echo "INSTALL NODEJS 22"
+          echo "================================="
           if ! command -v node >/dev/null 2>&1; then
             curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
             sudo apt install -y nodejs
           fi
 
-          echo "Node Version:"
           node -v
+          npm -v
 
-          echo "=============================="
+          echo "================================="
           echo "INSTALL PM2"
-          echo "=============================="
+          echo "================================="
           if ! command -v pm2 >/dev/null 2>&1; then
             sudo npm install -g pm2
           fi
 
-          echo "=============================="
-          echo "CLONE / UPDATE REPO"
-          echo "=============================="
+          echo "================================="
+          echo "CLONE / UPDATE REPOSITORY"
+          echo "================================="
 
-          if [ ! -d "$APP_DIR" ]; then
-            git clone https://github.com/RashiqulRony/ostad-module3-cicd.git $APP_DIR
+          if [ ! -d "$APP_DIR/.git" ]; then
+            echo "Fresh clone..."
+
+            sudo rm -rf "$APP_DIR"
+            sudo mkdir -p "$(dirname "$APP_DIR")"
+            sudo chown -R $USER:$USER /var/www
+
+            git clone "$REPO_URL" "$APP_DIR"
           else
-            cd $APP_DIR
+            echo "Updating existing repository..."
+
+            cd "$APP_DIR"
+
+            git fetch origin
+            git reset --hard origin/main
+            git clean -fd
             git pull origin main
           fi
 
-          cd $APP_DIR
+          cd "$APP_DIR"
 
-          echo "=============================="
+          echo "================================="
           echo "INSTALL DEPENDENCIES"
-          echo "=============================="
+          echo "================================="
           npm install
 
-          echo "=============================="
+          echo "================================="
           echo "RUN TESTS"
-          echo "=============================="
+          echo "================================="
           npm run check || true
 
-          echo "=============================="
-          echo "NPM START (OPTIONAL CHECK)"
-          echo "=============================="
-          npm start || true
-
-          echo "=============================="
-          echo "PM2 CLEANUP"
-          echo "=============================="
+          echo "================================="
+          echo "STOP OLD PM2 PROCESS"
+          echo "================================="
           pm2 delete node-app || true
 
-          echo "=============================="
-          echo "START APP WITH PM2"
-          echo "=============================="
+          echo "================================="
+          echo "START APPLICATION"
+          echo "================================="
           pm2 start "./src/server.js" --name node-app
 
-          echo "=============================="
-          echo "SAVE PM2 PROCESS"
-          echo "=============================="
+          echo "================================="
+          echo "SAVE PM2"
+          echo "================================="
           pm2 save
 
-          echo "=============================="
+          echo "================================="
+          echo "PM2 STATUS"
+          echo "================================="
+          pm2 list
+
+          echo "================================="
           echo "DEPLOY SUCCESS"
-          echo "=============================="
+          echo "================================="
 
           EOF
 
-      # ================= CLEANUP =================
       - name: Cleanup SSH Key
         if: always()
-        run: rm -f ~/.ssh/ec2_key
+        run: |
+          rm -f ~/.ssh/ec2_key
